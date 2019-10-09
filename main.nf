@@ -1562,6 +1562,7 @@ if (params.pseudo_aligner == 'salmon'){
         output:
         file "${sample}/" into salmon_logs
         set val(sample), file("${sample}/") into salmon_tximport, salmon_parsegtf
+        file "${sample}.bam"
 
         script:
         def rnastrandness = params.singleEnd ? 'U' : 'IU'
@@ -1574,13 +1575,14 @@ if (params.pseudo_aligner == 'salmon'){
         unmapped = params.saveUnaligned ? "--writeUnmappedNames" : ''
         """
         salmon quant --validateMappings \\
+                        --writeMappings \\
                         --seqBias --useVBOpt --gcBias \\
                         --geneMap ${gtf} \\
                         --threads ${task.cpus} \\
                         --libType=${rnastrandness} \\
                         --index ${index} \\
                         $endedness $unmapped\\
-                        -o ${sample}
+                        -o ${sample} | samtools view -bhS -o ${sample}.bam -
         """
         }
 
@@ -1590,7 +1592,7 @@ if (params.pseudo_aligner == 'salmon'){
       publishDir "${params.outdir}/salmon", mode: 'copy'
 
       input:
-      set val(name), file ("salmon/*") from salmon_parsegtf.collect()
+      file ("salmon/*") from salmon_parsegtf.collect()
       file gtf from gtf_salmon_merge
 
       output:
