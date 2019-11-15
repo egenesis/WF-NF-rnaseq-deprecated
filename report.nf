@@ -58,7 +58,7 @@ Channel.from(params.xeno)
 Channel
     .fromPath(params.gtf, checkIfExists: true)
     .ifEmpty { exit 1, "GTF annotation file not found: ${params.gtf}" }
-    .into { gtf_stringtieFPKM; gtf_makeHisatSplicesites; gtf_makeHISATindex; }
+    .into { gtf_stringtieFPKM; gtf_makeHisatSplicesites; gtf_makeHISATindex; gtf_viz}
 
 Channel.fromPath(params.fasta, checkIfExists: true)
     .ifEmpty { exit 1, "Genome fasta file not found: ${params.fasta}" }
@@ -256,9 +256,8 @@ process hisat2_sortOutput {
     file hisat2_bam
 
     output:
-    file "${hisat2_bam.baseName}.sorted.bam" into bam_stringtieFPKM
-    file "${hisat2_bam.baseName}.sorted.bam.bai" into bam_index
-    file "${hisat2_bam.baseName}.mosdepth*" into mosdepth
+    file "${hisat2_bam.baseName}.sorted.bam" into bam_stringtieFPKM, bam_mosdepth
+    file "${hisat2_bam.baseName}.sorted.bam.bai" into bam_index, bai_mosdepth
 
     script:
     """
@@ -267,7 +266,6 @@ process hisat2_sortOutput {
         -@ ${task.cpus} \\
         -o ${hisat2_bam.baseName}.sorted.bam
     samtools index ${hisat2_bam.baseName}.sorted.bam
-    mosdepth -b 10 ${hisat2_bam.baseName} ${hisat2_bam.baseName}.sorted.bam
     """
 }
 
@@ -280,6 +278,7 @@ process stringtieFPKM_small {
         saveAs: {filename ->
             if (filename.indexOf("transcripts.gtf") > 0) "transcripts/$filename"
             else if (filename.indexOf("cov_refs.gtf") > 0) "cov_refs/$filename"
+            else if (filename.indexOf("transcripts.fa") > 0) "fasta/$filename"
             else "$filename"
         }
 
@@ -290,8 +289,8 @@ process stringtieFPKM_small {
     file gtf from gtf_stringtieFPKM.collect()
 
     output:
-    file "*_transcripts.gtf"
-    file "*_merged_transcripts.gtf" into stringtieGTF 
+    file "*_transcripts.gtf"  into stringtieGTF  
+    file "*_merged_transcripts.gtf"
     file "*.gene_abund.txt"
     file "*.cov_refs.gtf"
     file "*.fa"
@@ -318,6 +317,33 @@ process stringtieFPKM_small {
     """
 }
 
+
+process viz {
+    label 'low_memory'
+    tag "${bam.baseName}"
+    publishDir "${params.outdir}/viz/${bam.baseName}", mode: 'copy'
+
+    input:
+    file bam from bam_mosdepth 
+    file bai from bai_mosdepth
+    file gtf from stringtieGTF
+    file ref_gtf from gtf_viz
+
+    output:
+    file "*mosdepth*"
+    file "*gz"
+    file "*tsv"
+    file "*pdf"
+
+    script:
+    """
+    mosdepth -b 1 ${bam.baseName} ${bam}
+    gffread ${gtf} --table @chr,@start,@end,@strand,@exons,reference_id,ref_gene_id,ref_gene_name,TPM  --keep-genes -o ${bam.baseName}_transcripts.tsv
+    gffread ${ref_gtf} --table @chr,@start,@end,@strand,@exons,gene_name -o ${bam.baseName}_ref_transcripts.tsv
+    
+    plot_xeno.R ${bam.baseName}.per-base.bed.gz  ${bam.baseName}_ref_transcripts.tsv ${bam.baseName}_transcripts.tsv ${bam.baseName}_${params.xeno}.pdf
+    """
+}
 
 /*
  * Completion e-mail notification
