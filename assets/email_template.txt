@@ -1,6 +1,12 @@
-========================================
- nf-core/rnaseq v${version}
-========================================
+----------------------------------------------------
+                                        ,--./,-.
+        ___     __   __   __   ___     /,-._.--~\\
+  |\\ | |__  __ /  ` /  \\ |__) |__         }  {
+  | \\| |       \\__, \\__/ |  \\ |___     \\`-._,-`-,
+                                        `._,._,'
+  nf-core/rnaseq v${version}
+----------------------------------------------------
+
 Run Name: $runName
 
 <% if (success){
@@ -31,7 +37,7 @@ ${errorReport}
 ## nf-core/rnaseq execution completed with warnings ##
 ##################################################
 The pipeline finished successfully, but the following samples were skipped,
-due to very low alignment (less than 5%):
+due to very low alignment (less than ${percent_aln_skip}%):
 
   - ${skipped_poor_alignment.join("\n  - ")}
 """
