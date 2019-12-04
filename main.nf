@@ -813,13 +813,17 @@ if(params.pseudo_aligner == 'salmon' && !params.salmon_index){
             file gtf from gtf_makeSalmonIndex
 
             output:
-            file "*.fa" into ch_fasta_for_salmon_index
+            file "gentrome.fa" into ch_fasta_for_salmon_index
+            file "decoys.txt" into ch_decoys_for_salmon
 
             script:
 	          // filter_gtf_for_genes_in_genome.py is bundled in this package, in rnaseq/bin
             """
             filter_gtf_for_genes_in_genome.py --gtf $gtf --fasta $fasta -o ${gtf.baseName}__in__${fasta.baseName}.gtf
             gffread -F -w transcripts.fa -g $fasta ${gtf.baseName}__in__${fasta.baseName}.gtf
+            grep "^>" fasta | cut -d " " -f 1 > decoys.txt
+            sed -i.bak -e 's/>//g' decoys.txt
+            cat transcripts.fa $fasta > gentrome.fa
             """
         }
     }
@@ -831,6 +835,7 @@ if(params.pseudo_aligner == 'salmon' && !params.salmon_index){
 
         input:
         file fasta from ch_fasta_for_salmon_index
+        file gfasta from ch_fasta_genome
 
         output:
         file 'salmon_index' into salmon_index
@@ -1558,6 +1563,7 @@ if (params.pseudo_aligner == 'salmon'){
         set sample, file(reads) from trimmed_reads_salmon
         file index from salmon_index.collect()
         file gtf from gtf_salmon.collect()
+        file decoy from ch_decoys_for_salmon.collect()
 
         output:
         file "${sample}/" into salmon_logs
@@ -1575,6 +1581,7 @@ if (params.pseudo_aligner == 'salmon'){
         unmapped = params.saveUnaligned ? "--writeUnmappedNames" : ''
         """
         salmon quant --validateMappings \\
+                    -d $decoy \\
                         --writeMappings \\
                         --seqBias --useVBOpt --gcBias \\
                         --geneMap ${gtf} \\
