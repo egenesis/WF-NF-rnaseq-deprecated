@@ -19,7 +19,7 @@ cov = read_tsv(mosdepth,
                col_names = c("chr", "start", "end", "coverage"))
 genes = read_tsv(stringtie_gtf,
                  col_names = c("chr", "start", "end", "strand", "exons",
-                               "tx", "gene", "name", "tpm")) %>%
+                               "tx", "gene", "name", "tpm", "cov")) %>%
     filter(tpm != ".") %>% 
     mutate(name=ifelse(name==".",paste0("tx", 1:n()),name)) %>% 
     mutate(ntx = 1:n(),
@@ -36,7 +36,7 @@ exons = genes %>%
     separate(exons, sep = "-", into = c("start", "end")) %>% 
     mutate(start = as.integer(start),
            end = as.integer(end),
-           tpm=as.integer(tpm)) 
+           cov=as.integer(cov)) 
 
 maxx = max(cov$end) + 1000
 minn = 0
@@ -70,7 +70,7 @@ gcov  = ggplot(cov, aes(start, coverage)) +
 
 stringtie = ggplot(exons, aes(start, ntx)) +
     ggplot2::geom_segment(aes(xend=end, yend=ntx,
-                              color=log2(as.numeric(tpm))), size = 5) +
+                              color=log2(as.numeric(cov))), size = 5) +
     ggplot2::geom_segment(data=genes[genes$direction=="last",],
                           aes(start, ntx, xend=end, yend=ntx),
                           arrow=arrow(ends="last",
@@ -81,7 +81,7 @@ stringtie = ggplot(exons, aes(start, ntx)) +
                           arrow=arrow(ends="first",
                                       length = unit(0.05, "inches"))) +
     geom_text(data=genes, aes(end, ntx, label=name), size=3, hjust = 0) +
-    scale_color_continuous_tableau("log2(TPM)", palette = "Blue-Teal")  +
+    scale_color_continuous_tableau("log2(coverage)", palette = "Blue-Teal")  +
     theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(),
           panel.background = element_rect(fill = "white"),
           plot.margin = margin( t = 0, b = 0,  unit = "pt")) +

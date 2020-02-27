@@ -26,6 +26,7 @@ def helpMessage() {
 
     Generic:
       --singleEnd                   Specifies that the input is single-end reads
+      --subset                      Subset raw files
 
     References:                     If not specified in the configuration file or you wish to overwrite any of the references.
       --genome                      Name of iGenomes reference
@@ -339,19 +340,19 @@ if (params.readPaths) {
             .from(params.readPaths)
             .map { row -> [ row[0], [ file(row[1][0], checkIfExists: true) ] ] }
             .ifEmpty { exit 1, "params.readPaths was empty - no input files supplied" }
-            .into { raw_reads_fastqc; raw_reads_trimgalore }
+            .set { raw }
     } else {
         Channel
             .from(params.readPaths)
             .map { row -> [ row[0], [ file(row[1][0], checkIfExists: true), file(row[1][1], checkIfExists: true) ] ] }
             .ifEmpty { exit 1, "params.readPaths was empty - no input files supplied" }
-            .into { raw_reads_fastqc; raw_reads_trimgalore }
+            .set { raw }
     }
 } else {
     Channel
         .fromFilePairs( params.reads, size: params.singleEnd ? 1 : 2 )
         .ifEmpty { exit 1, "Cannot find any reads matching: ${params.reads}\nNB: Path needs to be enclosed in quotes!\nNB: Path requires at least one * wildcard!\nIf this is single-end data, please specify --singleEnd on the command line." }
-        .into { raw_reads_fastqc; raw_reads_trimgalore }
+        .set { raw }
 }
 
 // Header log info
@@ -828,6 +829,34 @@ if (params.pseudo_aligner == 'salmon' && !params.salmon_index) {
     }
 }
 
+if (params.subset){
+    process subsetFastq {
+        tag "$name"
+        label 'process_medium'
+        publishDir "${params.outdir}/subset", mode: 'copy'
+    
+        input:
+        set val(name), file(reads) from raw
+
+        output:
+        set val(name), file("*_subset.fastq.gz") into raw_reads_fastqc, raw_reads_trimgalore
+
+        script:
+        //cpus = ${task.cpus}.toInteger().intdiv(2)
+        secondRead = params.singleEnd ? '' : "seqkit sample -j 2 -s 42 -n ${params.subset} -o  ${name}_R2_subset.fastq.gz ${reads[1]} &"
+        """
+        seqkit sample -j 2 -s 42 -n ${params.subset} -o ${name}_R1_subset.fastq.gz ${reads[0]}  &
+        $secondRead
+        wait
+        """
+    }
+}else{
+    raw
+    .into{raw_reads_fastqc; raw_reads_trimgalore}
+}
+
+
+
 /*
  * STEP 1 - FastQC
  */
@@ -840,7 +869,7 @@ process fastqc {
     when:
     !params.skipQC && !params.skipFastQC
 
-    input:
+   input:
     set val(name), file(reads) from raw_reads_fastqc
 
     output:
@@ -849,7 +878,7 @@ process fastqc {
     script:
     """
     fastqc --quiet --threads $task.cpus $reads
-    """
+     """
 }
 
 
@@ -1054,7 +1083,7 @@ if (!params.skipAlignment) {
           file "*Log.out" into star_log
           file "where_are_my_files.txt"
           file "*Unmapped*" optional true
-          file "${prefix}Aligned.sortedByCoord.out.bam.bai" into bam_index_rseqc, bam_index_genebody
+          file "${prefix}.bam.bai" into bam_index_rseqc, bam_index_genebody
 
           script:
           prefix = reads[0].toString() - ~/(_R1)?(_trimmed)?(_val_1)?(\.fq)?(\.fastq)?(\.gz)?$/
@@ -1074,7 +1103,8 @@ if (!params.skipAlignment) {
               --runDirPerm All_RWX $unaligned \\
               --outFileNamePrefix $prefix $seq_center
 
-          samtools index ${prefix}Aligned.sortedByCoord.out.bam
+          mv ${prefix}Aligned.sortedByCoord.out.bam ${prefix}.bam
+          samtools index ${prefix}.bam
           """
       }
       // Filter removes all 'aligned' channels that fail the check
@@ -1282,22 +1312,22 @@ if (!params.skipAlignment) {
       file bam from bam_markduplicates
 
       output:
-      file "${bam.baseName}.markDups.bam" into bam_md
+      file "${bam.baseName}.md.bam" into bam_md
       file "${bam.baseName}.markDups_metrics.txt" into picard_results
-      file "${bam.baseName}.markDups.bam.bai"
+      file "${bam.baseName}.md.bam.bai"
 
       script:
       markdup_java_options = (task.memory.toGiga() > 8) ? params.markdup_java_options : "\"-Xms" +  (task.memory.toGiga() / 2 )+"g "+ "-Xmx" + (task.memory.toGiga() - 1)+ "g\""
       """
       picard ${markdup_java_options} MarkDuplicates \\
           INPUT=$bam \\
-          OUTPUT=${bam.baseName}.markDups.bam \\
+          OUTPUT=${bam.baseName}.md.bam \\
           METRICS_FILE=${bam.baseName}.markDups_metrics.txt \\
           REMOVE_DUPLICATES=false \\
           ASSUME_SORTED=true \\
           PROGRAM_RECORD_ID='null' \\
           VALIDATION_STRINGENCY=LENIENT
-      samtools index ${bam.baseName}.markDups.bam
+      samtools index ${bam.baseName}.md.bam
       """
   }
 
