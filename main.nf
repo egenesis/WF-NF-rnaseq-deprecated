@@ -842,12 +842,10 @@ if (params.subset){
         set val(name), file("*_subset.fastq.gz") into raw_reads_fastqc, raw_reads_trimgalore
 
         script:
-        //cpus = ${task.cpus}.toInteger().intdiv(2)
-        secondRead = params.singleEnd ? '' : "seqkit sample -j 2 -s 42 -n ${params.subset} -o  ${name}_R2_subset.fastq.gz ${reads[1]} &"
+        secondRead = params.singleEnd ? '' : "seqkit sample -j ${task.cpus} -s 42 -p ${params.subset} -o  ${name}_R2_subset.fastq.gz ${reads[1]}"
         """
-        seqkit sample -j 2 -s 42 -n ${params.subset} -o ${name}_R1_subset.fastq.gz ${reads[0]}  &
+        seqkit sample -j ${task.cpus}  -s 42 -p ${params.subset} -o ${name}_R1_subset.fastq.gz ${reads[0]} 
         $secondRead
-        wait
         """
     }
 }else{
