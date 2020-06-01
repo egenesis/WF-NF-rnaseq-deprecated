@@ -1,5 +1,15 @@
 # nf-core/rnaseq: Changelog
 
+## Version 1.4.4dev
+
+### Pipeline enhancements & fixes
+
+* Add assembly of non-mapped reads
+* Add stats for samtools and vcftools
+* Add crispresso2 for KO regions
+* Coverage Plasmid and Chromosome 1
+* Assembly of plasmid reads and mapping to plasmid genes
+
 ## Version 1.4.3dev
 
 ### Pipeline enhancements & fixes
